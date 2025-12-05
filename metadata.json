@@ -1,0 +1,7 @@
+{
+  "name": "TEST OrderEat-RestaurantPanel",
+  "description": "Partner portal for restaurants to manage orders and menus on OrderEat.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
