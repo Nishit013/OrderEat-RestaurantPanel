@@ -8,66 +8,87 @@ interface MapPickerProps {
 }
 
 export const MapPicker: React.FC<MapPickerProps> = ({ onLocationSelect, initialLat, initialLng }) => {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const markerRef = useRef<any>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
   const [loading, setLoading] = useState(false);
 
-  // Default to New Delhi if no location provided
+  // Default to New Delhi
   const defaultLat = 28.6139;
   const defaultLng = 77.2090;
 
   useEffect(() => {
-    if (!mapRef.current || !(window as any).google) return;
+    if (!mapContainerRef.current || mapInstanceRef.current) return;
+
+    // Check if Leaflet is loaded
+    const L = (window as any).L;
+    if (!L) {
+        console.error("Leaflet not loaded");
+        return;
+    }
 
     const lat = initialLat || defaultLat;
     const lng = initialLng || defaultLng;
-    const center = { lat, lng };
 
     // Initialize Map
-    const map = new (window as any).google.maps.Map(mapRef.current, {
-      center,
-      zoom: 15,
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: false,
-      zoomControl: true,
-    });
+    const map = L.map(mapContainerRef.current).setView([lat, lng], 15);
+    
+    // Add OpenStreetMap Tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
 
     // Initialize Marker
-    const marker = new (window as any).google.maps.Marker({
-      position: center,
-      map,
-      draggable: true,
-      title: "Drag to set location",
-      animation: (window as any).google.maps.Animation.DROP
+    // Fix marker icon path issue in some build environments/CDNs
+    const defaultIcon = L.icon({
+        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
     });
 
-    // Listen for drag end
-    marker.addListener("dragend", (e: any) => {
-      const newLat = e.latLng.lat();
-      const newLng = e.latLng.lng();
-      onLocationSelect(newLat, newLng);
-      map.panTo(e.latLng);
+    const marker = L.marker([lat, lng], { draggable: true, icon: defaultIcon }).addTo(map);
+
+    // Event: Drag End
+    marker.on('dragend', function(event: any) {
+        const position = event.target.getLatLng();
+        onLocationSelect(position.lat, position.lng);
+        map.panTo(position);
     });
 
-    // Allow clicking on map to move marker
-    map.addListener("click", (e: any) => {
-        marker.setPosition(e.latLng);
-        onLocationSelect(e.latLng.lat(), e.latLng.lng());
-        map.panTo(e.latLng);
+    // Event: Map Click
+    map.on('click', function(e: any) {
+        marker.setLatLng(e.latlng);
+        onLocationSelect(e.latlng.lat, e.latlng.lng);
+        map.panTo(e.latlng);
     });
 
     mapInstanceRef.current = map;
     markerRef.current = marker;
+
+    // Fix for map not rendering correctly in some flex containers initially
+    setTimeout(() => {
+        map.invalidateSize();
+    }, 100);
+
+    return () => {
+        if (mapInstanceRef.current) {
+            mapInstanceRef.current.remove();
+            mapInstanceRef.current = null;
+        }
+    };
   }, []);
 
-  // Update marker if props change (e.g. initial load)
+  // Update marker position if props change externally
   useEffect(() => {
-      if(mapInstanceRef.current && markerRef.current && initialLat && initialLng) {
-          const pos = { lat: initialLat, lng: initialLng };
-          markerRef.current.setPosition(pos);
-          mapInstanceRef.current.panTo(pos);
+      if (mapInstanceRef.current && markerRef.current && initialLat && initialLng) {
+          const L = (window as any).L;
+          const newLatLng = new L.LatLng(initialLat, initialLng);
+          markerRef.current.setLatLng(newLatLng);
+          mapInstanceRef.current.panTo(newLatLng);
       }
   }, [initialLat, initialLng]);
 
@@ -84,10 +105,10 @@ export const MapPicker: React.FC<MapPickerProps> = ({ onLocationSelect, initialL
             const lng = pos.coords.longitude;
             
             if (mapInstanceRef.current && markerRef.current) {
-                const newPos = new (window as any).google.maps.LatLng(lat, lng);
-                mapInstanceRef.current.panTo(newPos);
-                mapInstanceRef.current.setZoom(17);
-                markerRef.current.setPosition(newPos);
+                const L = (window as any).L;
+                const newLatLng = new L.LatLng(lat, lng);
+                markerRef.current.setLatLng(newLatLng);
+                mapInstanceRef.current.setView(newLatLng, 17);
                 onLocationSelect(lat, lng);
             }
             setLoading(false);
@@ -101,12 +122,12 @@ export const MapPicker: React.FC<MapPickerProps> = ({ onLocationSelect, initialL
   };
 
   return (
-    <div className="relative h-72 w-full rounded-xl overflow-hidden border border-gray-300 dark:border-gray-600 shadow-inner group">
-        <div ref={mapRef} className="w-full h-full bg-gray-100 dark:bg-gray-800" />
+    <div className="relative h-72 w-full rounded-xl overflow-hidden border border-gray-300 dark:border-gray-600 shadow-inner group z-0">
+        <div ref={mapContainerRef} className="w-full h-full bg-gray-100 dark:bg-gray-800 z-0" />
         
         <button 
             onClick={handleLocateMe}
-            className="absolute bottom-4 right-4 bg-white dark:bg-gray-800 px-4 py-2 rounded-full shadow-lg text-sm font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 z-20 transition-transform active:scale-95"
+            className="absolute bottom-4 right-4 bg-white dark:bg-gray-800 px-4 py-2 rounded-full shadow-lg text-sm font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 z-[400] transition-transform active:scale-95"
             type="button"
         >
             {loading ? (
@@ -117,7 +138,7 @@ export const MapPicker: React.FC<MapPickerProps> = ({ onLocationSelect, initialL
             Detect My Location
         </button>
         
-        <div className="absolute top-4 left-4 bg-white/90 dark:bg-black/80 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-md text-xs font-semibold text-gray-600 dark:text-gray-300 z-10 pointer-events-none">
+        <div className="absolute top-4 left-4 bg-white/90 dark:bg-black/80 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-md text-xs font-semibold text-gray-600 dark:text-gray-300 z-[400] pointer-events-none">
             Drag marker to pinpoint exact entrance
         </div>
     </div>
