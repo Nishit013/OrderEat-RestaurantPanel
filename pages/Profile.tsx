@@ -113,14 +113,20 @@ export const Profile: React.FC<ProfileProps> = ({ restaurant }) => {
                     className="w-full border dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-700 h-24 mb-4 text-gray-900 dark:text-white"
                     value={formData.address || ''}
                     onChange={e => handleChange('address', e.target.value)}
+                    placeholder="Enter full address or use the map below to auto-fill"
                 />
                 
                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Locate on Map</label>
                 <MapPicker 
                     initialLat={restaurant.lat} 
                     initialLng={restaurant.lng}
-                    onLocationSelect={(lat, lng) => {
-                        setFormData(prev => ({ ...prev, lat, lng }));
+                    onLocationSelect={(lat, lng, address) => {
+                        setFormData(prev => ({ 
+                            ...prev, 
+                            lat, 
+                            lng,
+                            address: address || prev.address // Auto-fill address if found from map
+                        }));
                     }}
                 />
                 {formData.lat && <p className="text-xs text-green-600 dark:text-green-400 mt-2 font-bold flex items-center gap-1"><Save className="w-3 h-3"/> Location Coordinates Captured</p>}
